@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($base = \"h:\\\\Github\\\\Paperless M365 Stack\\\\Paperless-M365-Stack\"; foreach \\($name in @\\(\"automation\",\"docs\",\"flows\",\"setup\"\\)\\) { Remove-Item \"$base\\\\$name\" -Force; New-Item -ItemType Directory -Path \"$base\\\\$name\" | Out-Null; Write-Host \"Created folder: $name\" })",
+      "PowerShell(git -C \"h:\\\\Github\\\\Paperless M365 Stack\\\\Paperless-M365-Stack\" push)"
+    ]
+  }
+}
