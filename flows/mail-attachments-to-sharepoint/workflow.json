@@ -1,0 +1,861 @@
+{
+  "name": "Mail Anhänge mit korrektem Name in Sharepoint",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds"
+            }
+          ]
+        }
+      },
+      "id": "3a410774-e6dd-4d39-b2cc-a0e7fccb0a01",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -10928,
+        2336
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "75554bdc-2b66-461d-aea5-781cc6b173c1",
+      "name": "Manueller Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -10928,
+        2528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 1,
+        "filtersUI": {
+          "values": {
+            "filters": {
+              "hasAttachments": true,
+              "foldersToInclude": [
+                "<OUTLOOK_INBOX_FOLDER_ID>"
+              ]
+            }
+          }
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "b8891e2f-4e1e-443e-bd54-750f120bd445",
+      "webhookId": "1ae4afb6-04f2-4af3-b88e-5cc839bfa349",
+      "name": "Mails mit Anhängen holen",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -10704,
+        2432
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "LZwWtaXfq2J5TCa7",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Alle Attachments der ERSTEN Mail extrahieren\nconst mails = $input.all();\nif (mails.length === 0) return [];\n\nmails.sort((a, b) => new Date(b.json.receivedDateTime || 0) - new Date(a.json.receivedDateTime || 0));\n\nconst mail = mails[0];\nconst binary = mail.binary || {};\nconst results = [];\nlet attachmentIndex = 0;\nconst totalAttachments = Object.keys(binary).length;\nif (totalAttachments === 0) return [];\n\nfor (const [key, data] of Object.entries(binary)) {\n  const filename = data.fileName || '';\n  const mimeType = data.mimeType || '';\n  const fileSize = data.fileSize || 0;\n  const isPdf = filename.toLowerCase().endsWith('.pdf') || mimeType === 'application/pdf';\n\n  let fileSizeFormatted = '';\n  if (fileSize < 1024) fileSizeFormatted = fileSize + ' B';\n  else if (fileSize < 1024 * 1024) fileSizeFormatted = (fileSize / 1024).toFixed(1) + ' KB';\n  else fileSizeFormatted = (fileSize / (1024 * 1024)).toFixed(1) + ' MB';\n\n  results.push({\n    json: {\n      mailId: mail.json.id,\n      mailSubject: mail.json.subject || 'Kein Betreff',\n      mailFrom: mail.json.from?.emailAddress?.address || 'unbekannt',\n      mailDate: mail.json.receivedDateTime || 'unbekannt',\n      filename, isPdf, mimeType, fileSize, fileSizeFormatted,\n      binaryKey: key, attachmentIndex, totalAttachments,\n      status: 'pending', error: null\n    },\n    binary: { data }\n  });\n  attachmentIndex++;\n}\nreturn results;"
+      },
+      "id": "5c0a746c-b9c7-4505-9786-ff75e6a30586",
+      "name": "Alle Attachments extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10480,
+        2432
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "1ffb4bed-cde3-470e-8960-5193d86d6b86",
+      "name": "Mehrere Anhänge nacheinander",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -10256,
+        2528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "is-pdf-check",
+              "leftValue": "={{ $json.isPdf }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a0a94cab-d96f-4610-bbaf-3033d3c030de",
+      "name": "Ist PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -10032,
+        2016
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// PDF Passwortschutz prüfen via /Encrypt Marker\nconst input = $input.first();\nconst binaryData = input.binary?.data;\n\nif (!binaryData || !binaryData.data) {\n  return { json: { ...input.json, pdfProtected: true, pdfCheckStatus: '✗ Keine Binary-Daten vorhanden' }, binary: input.binary };\n}\n\ntry {\n  const raw = Buffer.from(binaryData.data, 'base64').toString('latin1');\n  const isEncrypted = raw.includes('/Encrypt');\n  return {\n    json: { ...input.json, pdfProtected: isEncrypted, pdfCheckStatus: isEncrypted ? '✗ PDF ist passwortgeschützt' : '✓ PDF kann geöffnet werden' },\n    binary: input.binary\n  };\n} catch(e) {\n  return { json: { ...input.json, pdfProtected: true, pdfCheckStatus: '✗ PDF-Prüfung fehlgeschlagen: ' + e.message }, binary: input.binary };\n}"
+      },
+      "id": "9a4b1fba-fe1c-4466-b6f5-7066ae879f97",
+      "name": "PDF öffenbar?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -9824,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "pdf-protected-check",
+              "leftValue": "={{ $json.pdfProtected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c31cba34-574f-4e1d-b872-be2295dcd2f5",
+      "name": "PDF offen?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -9600,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "pgd-001",
+              "name": "ocrApplied",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "pgd-002",
+              "name": "ocrStatus",
+              "value": "⚠ PDF passwortgeschützt - OCR übersprungen",
+              "type": "string"
+            },
+            {
+              "id": "pgd-003",
+              "name": "status",
+              "value": "pdf_protected",
+              "type": "string"
+            },
+            {
+              "id": "pgd-004",
+              "name": "error",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "eeaf63a7-c1e2-4cc8-b3f0-e59b3674dcde",
+      "name": "PDF geschützt - durchreichen",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -9376,
+        1856
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "kpd-001",
+              "name": "ocrApplied",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "kpd-002",
+              "name": "ocrStatus",
+              "value": "- Kein PDF, kein OCR nötig",
+              "type": "string"
+            },
+            {
+              "id": "kpd-003",
+              "name": "status",
+              "value": "no_ocr_needed",
+              "type": "string"
+            },
+            {
+              "id": "kpd-004",
+              "name": "error",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "42d59450-19bc-4d06-a30d-0143cc0e53a0",
+      "name": "Kein PDF - durchreichen",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -9376,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-20250514",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-20250514"
+        },
+        "text": "Analysiere dieses Dokument. (keine Erklärungen, keine Backticks):\nNAME: [sinnvoller dateiname ohne sonderzeichen groß und kleinschreibung beachten]\nKATEGORIE: [eine von: Rechnungen, Verträge, Angebote, Lieferscheine, Kontoauszüge, Versicherungen, Behörden, Sonstiges, wenn du selbst eine erkennst diese nehmen]",
+        "inputType": "binary",
+        "options": {
+          "maxTokens": 1024
+        }
+      },
+      "id": "601bf997-92f3-4d1d-96f7-2b5313564451",
+      "name": "Dokument analysieren (Claude)",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        -9136,
+        1696
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "kNcQg7qqdb6vhXtR",
+          "name": "n8n2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NAME + KATEGORIE aus Claude-Antwort parsen\nconst kiResult = $input.first();\nlet newName = null;\nlet category = 'Sonstiges';\ntry {\n  if (kiResult.json.content && kiResult.json.content[0] && kiResult.json.content[0].text) {\n    const responseText = kiResult.json.content[0].text.trim();\n    const nameMatch = responseText.match(/NAME:\\s*(.+)/i);\n    const categoryMatch = responseText.match(/KATEGORIE:\\s*(.+)/i);\n    if (nameMatch) newName = nameMatch[1].trim();\n    if (categoryMatch) category = categoryMatch[1].trim();\n  }\n} catch(e) {}\n\nlet prevData = null, prevBinary = null;\nfor (const source of ['OCR erfolgreich', 'Claude OCR verarbeiten', 'Kein PDF - durchreichen', 'PDF geschützt - durchreichen']) {\n  try { const item = $(source).first(); if (item) { prevData = item.json; prevBinary = item.binary; break; } } catch(e) {}\n}\nif (!prevData) { prevData = $('Mehrere Anhänge nacheinander').first().json; prevBinary = $('Mehrere Anhänge nacheinander').first().binary; }\n\nreturn {\n  json: { ...prevData, newName, category, kiStatus: '✓ Kategorie: ' + category + (newName ? ' | Name: ' + newName : ''), status: 'ki_success' },\n  binary: prevBinary\n};"
+      },
+      "id": "88545935-c5ac-43b4-acaf-52b0acae35ab",
+      "name": "KI erfolgreich",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8912,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let prevData = null, prevBinary = null;\nfor (const source of ['OCR erfolgreich', 'Claude OCR verarbeiten', 'Kein PDF - durchreichen', 'PDF geschützt - durchreichen']) {\n  try { const item = $(source).first(); if (item) { prevData = item.json; prevBinary = item.binary; break; } } catch(e) {}\n}\nif (!prevData) { prevData = $('Mehrere Anhänge nacheinander').first().json; prevBinary = $('Mehrere Anhänge nacheinander').first().binary; }\n\nlet errorMsg = 'KI-Analyse fehlgeschlagen';\ntry {\n  const e = $input.first().json.error;\n  if (e) errorMsg = typeof e === 'string' ? e : e.message || JSON.stringify(e);\n} catch(e) {}\n\nreturn {\n  json: { ...prevData, newName: null, category: 'Sonstiges', kiStatus: '✗ KI fehlgeschlagen, nutze Originalname + Sonstiges', status: 'ki_failed', error: (prevData?.error ? prevData.error + ' | ' : '') + errorMsg },\n  binary: prevBinary\n};"
+      },
+      "id": "bf429560-c71c-48cb-9e06-7313ab1f408e",
+      "name": "KI fehlgeschlagen (nutze Sonstiges)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8912,
+        2128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<TENANT>.sharepoint.com/sites/<SITE>/_api/web/folders/add('/sites/<SITE>/DMS/Mail%20Anhänge/{{ $json.category }}')",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftSharePointOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json;odata=verbose"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e2e9c4e6-eaf0-4cb5-a92f-a02ef5858c7e",
+      "name": "Sharepoint Ordner erstellen wenn nicht vorhanden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -8688,
+        2000
+      ],
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "id": "tSPU2BBg8VESWa1l",
+          "name": "Microsoft SharePoint account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "let attachmentData = null, binaryData = null;\nfor (const source of ['KI erfolgreich', 'KI fehlgeschlagen (nutze Sonstiges)']) {\n  try { const item = $(source).first(); if (item) { attachmentData = item.json; binaryData = item.binary; break; } } catch(e) {}\n}\nif (!attachmentData) throw new Error('Konnte Attachment-Daten nicht finden');\n\nconst ext = attachmentData.filename.split('.').pop() || 'pdf';\nconst uploadFilename = attachmentData.newName ? attachmentData.newName + '.' + ext : attachmentData.filename;\nconst sharePointPath = '/sites/<SITE>/DMS/Mail Anhänge/' + attachmentData.category + '/' + uploadFilename;\n\nreturn { json: { ...attachmentData, uploadFilename, sharePointPath }, binary: binaryData };"
+      },
+      "id": "4659482c-fd99-4195-bee0-1d6141b5a610",
+      "name": "Upload vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8464,
+        2000
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<TENANT>.sharepoint.com/sites/<SITE>/_api/web/GetFolderByServerRelativeUrl('/sites/<SITE>/DMS/Mail%20Anhänge/{{ $json.category }}')/Files/add(url='{{ encodeURIComponent($json.uploadFilename) }}',overwrite=true)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftSharePointOAuth2Api",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "301eb5e4-b12a-471e-b81b-d0ef2223e97f",
+      "name": "SharePoint Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -8240,
+        2000
+      ],
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "id": "tSPU2BBg8VESWa1l",
+          "name": "Microsoft SharePoint account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const uploadResult = $input.first();\nconst prepData = $('Upload vorbereiten').first().json;\nconst serverUrl = uploadResult.json.d?.ServerRelativeUrl || prepData.sharePointPath;\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.results) staticData.results = [];\nif (!staticData.mailInfo) staticData.mailInfo = { mailId: prepData.mailId, mailSubject: prepData.mailSubject, mailFrom: prepData.mailFrom, mailDate: prepData.mailDate, totalAttachments: prepData.totalAttachments };\n\nstaticData.results.push({ filename: prepData.filename, uploadFilename: prepData.uploadFilename, size: prepData.fileSizeFormatted, category: prepData.category, sharePointPath: serverUrl, ocrStatus: prepData.ocrStatus, kiStatus: prepData.kiStatus, uploadStatus: '✓ Erfolgreich hochgeladen als: ' + prepData.uploadFilename, status: 'success', error: prepData.error || null });\nreturn [{ json: { saved: true, count: staticData.results.length } }];"
+      },
+      "id": "ccd575d8-2647-4c5d-abea-7cebe76150d8",
+      "name": "Upload erfolgreich",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7984,
+        2064
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let prepData = {};\ntry { prepData = $('Upload vorbereiten').first().json; } catch(e) {}\nlet errorMsg = 'Upload fehlgeschlagen';\ntry { const e = $input.first().json.error; if (e) errorMsg = typeof e === 'string' ? e : e.message || JSON.stringify(e); } catch(e) {}\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.results) staticData.results = [];\nif (!staticData.mailInfo) staticData.mailInfo = { mailId: prepData.mailId || 'unbekannt', mailSubject: prepData.mailSubject || 'unbekannt', mailFrom: prepData.mailFrom || 'unbekannt', mailDate: prepData.mailDate || 'unbekannt', totalAttachments: prepData.totalAttachments || 1 };\nstaticData.results.push({ filename: prepData.filename || 'unbekannt', uploadFilename: prepData.uploadFilename || 'unbekannt', size: prepData.fileSizeFormatted || 'unbekannt', category: prepData.category || 'Sonstiges', sharePointPath: 'NICHT HOCHGELADEN', ocrStatus: prepData.ocrStatus || 'unbekannt', kiStatus: prepData.kiStatus || 'unbekannt', uploadStatus: '✗ Upload fehlgeschlagen', status: 'error', error: errorMsg });\nreturn [{ json: { saved: true, count: staticData.results.length } }];"
+      },
+      "id": "358537ec-2db8-426d-a1d1-0e41ed7fab6e",
+      "name": "Upload fehlgeschlagen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8032,
+        2704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst mailInfo = staticData.mailInfo || {};\nconst results = staticData.results || [];\nlet hasErrors = false, hasCriticalError = false;\nfor (const r of results) { if (r.status === 'error') { hasCriticalError = true; hasErrors = true; } else if (r.error) hasErrors = true; }\n\nlet formattedDate = mailInfo.mailDate;\ntry { if (mailInfo.mailDate && mailInfo.mailDate !== 'unbekannt') { const d = new Date(mailInfo.mailDate); formattedDate = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE'); } } catch(e) {}\n\nstaticData.results = [];\nstaticData.mailInfo = null;\nreturn [{ json: { mailId: mailInfo.mailId, mailSubject: mailInfo.mailSubject, mailFrom: mailInfo.mailFrom, mailDate: formattedDate, totalAttachments: mailInfo.totalAttachments || results.length, processedAttachments: results.length, hasErrors, hasCriticalError, results } }];"
+      },
+      "id": "22d17d29-a601-4b3a-861b-98f2e2324482",
+      "name": "Ergebnisse sammeln",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10032,
+        2448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nlet summary = '═══════════════════════════════════════\\n📧 MAIL VERARBEITUNG ABGESCHLOSSEN\\n═══════════════════════════════════════\\n\\n';\nsummary += '📬 MAIL\\n───────────────────────────────────────\\n';\nsummary += '   Betreff:  ' + data.mailSubject + '\\n';\nsummary += '   Von:      ' + data.mailFrom + '\\n';\nsummary += '   Datum:    ' + data.mailDate + '\\n\\n';\nsummary += '📎 ATTACHMENTS\\n───────────────────────────────────────\\n';\nsummary += '   Verarbeitet: ' + data.processedAttachments + ' von ' + data.totalAttachments + '\\n\\n';\nsummary += '📝 ERGEBNISSE\\n───────────────────────────────────────\\n';\nfor (let i = 0; i < data.results.length; i++) {\n  const r = data.results[i];\n  const icon = r.status === 'success' ? '✅' : '❌';\n  summary += '\\n   ' + icon + ' ' + r.filename;\n  if (r.uploadFilename && r.uploadFilename !== r.filename) summary += ' → ' + r.uploadFilename;\n  summary += '\\n      OCR:       ' + r.ocrStatus + '\\n';\n  summary += '      Kategorie: ' + r.kiStatus + '\\n';\n  summary += '      Upload:    ' + r.uploadStatus + '\\n';\n  summary += '      Pfad:      ' + r.sharePointPath + '\\n';\n  if (r.error) summary += '      ⚠️ Fehler: ' + r.error + '\\n';\n}\nsummary += '\\n📊 STATUS\\n───────────────────────────────────────\\n';\nif (data.hasCriticalError) summary += '   ❌ FEHLGESCHLAGEN\\n';\nelse if (data.hasErrors) summary += '   ⚠️ MIT WARNUNGEN\\n';\nelse summary += '   ✅ ERFOLGREICH\\n';\nsummary += '═══════════════════════════════════════\\n';\nconsole.log(summary);\nreturn [{ json: { ...data, summary } }];"
+      },
+      "id": "f6ded9ec-a601-445a-ad8a-957683b5564e",
+      "name": "📋 Zusammenfassung",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -9808,
+        2448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "has-critical-error",
+              "leftValue": "={{ $json.hasCriticalError }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d3ad049f-7038-4846-9ab6-2d63c94dcda6",
+      "name": "Kritischer Fehler?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -9584,
+        2544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "messageId": {
+          "__rl": true,
+          "value": "={{ $json.mailId }}",
+          "mode": "id"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "<OUTLOOK_ERROR_FOLDER_ID>",
+          "mode": "id"
+        }
+      },
+      "id": "a41899c1-b4a7-4979-bb4d-52e5d98de292",
+      "webhookId": "7199bfcd-e5e3-4600-94b0-93cdd7475a54",
+      "name": "Mail -> n8n-fehler",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -9360,
+        2448
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "LZwWtaXfq2J5TCa7",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "messageId": {
+          "__rl": true,
+          "value": "={{ $json.mailId }}",
+          "mode": "id"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "<OUTLOOK_SUCCESS_FOLDER_ID>",
+          "mode": "id"
+        }
+      },
+      "id": "3099e6a7-3b1c-462f-9f59-6b8dfbe01730",
+      "webhookId": "7199bfcd-e5e3-4600-94b0-93cdd7475a54",
+      "name": "Mail -> n8n-erfolgreich",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -9360,
+        2640
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "LZwWtaXfq2J5TCa7",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "<TELEGRAM_CHAT_ID>",
+        "text": "={{ $json.summary }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "6e5d5cb0-c3b3-416b-bf92-d991854440d5",
+      "webhookId": "f2fa884f-6168-499e-83db-281d60a27fed",
+      "name": "Send a text message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -9584,
+        2336
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "ECVCrUBzZXmM8vdy",
+          "name": "Telegram account phytechn8n"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Mails mit Anhängen holen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manueller Start": {
+      "main": [
+        [
+          {
+            "node": "Mails mit Anhängen holen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mails mit Anhängen holen": {
+      "main": [
+        [
+          {
+            "node": "Alle Attachments extrahieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alle Attachments extrahieren": {
+      "main": [
+        [
+          {
+            "node": "Mehrere Anhänge nacheinander",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mehrere Anhänge nacheinander": {
+      "main": [
+        [
+          {
+            "node": "Ergebnisse sammeln",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ist PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ist PDF?": {
+      "main": [
+        [
+          {
+            "node": "PDF öffenbar?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Kein PDF - durchreichen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF öffenbar?": {
+      "main": [
+        [
+          {
+            "node": "PDF offen?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF offen?": {
+      "main": [
+        [
+          {
+            "node": "Dokument analysieren (Claude)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PDF geschützt - durchreichen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF geschützt - durchreichen": {
+      "main": [
+        [
+          {
+            "node": "Dokument analysieren (Claude)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kein PDF - durchreichen": {
+      "main": [
+        [
+          {
+            "node": "Dokument analysieren (Claude)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dokument analysieren (Claude)": {
+      "main": [
+        [
+          {
+            "node": "KI erfolgreich",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "KI fehlgeschlagen (nutze Sonstiges)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KI erfolgreich": {
+      "main": [
+        [
+          {
+            "node": "Sharepoint Ordner erstellen wenn nicht vorhanden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KI fehlgeschlagen (nutze Sonstiges)": {
+      "main": [
+        [
+          {
+            "node": "Sharepoint Ordner erstellen wenn nicht vorhanden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sharepoint Ordner erstellen wenn nicht vorhanden": {
+      "main": [
+        [
+          {
+            "node": "Upload vorbereiten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload vorbereiten": {
+      "main": [
+        [
+          {
+            "node": "SharePoint Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SharePoint Upload": {
+      "main": [
+        [
+          {
+            "node": "Upload erfolgreich",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upload fehlgeschlagen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload erfolgreich": {
+      "main": [
+        [
+          {
+            "node": "Mehrere Anhänge nacheinander",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload fehlgeschlagen": {
+      "main": [
+        [
+          {
+            "node": "Mehrere Anhänge nacheinander",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ergebnisse sammeln": {
+      "main": [
+        [
+          {
+            "node": "📋 Zusammenfassung",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 Zusammenfassung": {
+      "main": [
+        [
+          {
+            "node": "Kritischer Fehler?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kritischer Fehler?": {
+      "main": [
+        [
+          {
+            "node": "Mail -> n8n-fehler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mail -> n8n-erfolgreich",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "<ERROR_WORKFLOW_ID>"
+  },
+  "versionId": "4491987d-87b0-438f-b260-9987ae766a40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "<INSTANCE_ID>"
+  },
+  "id": "1oLJZre0QhyzXBGI",
+  "tags": []
+}

@@ -1,0 +1,14 @@
+# Edit mit: crontab -e
+# Pfade an die eigene Umgebung anpassen.
+
+# m h  dom mon dow   command
+
+# SharePoint "Mail Anhänge" → Paperless Consume (jede Minute)
+* * * * * /usr/bin/rclone move "sharepoint:Mail Anhänge" /home/docker2/pngx/consume
+
+# Paperless Export → SharePoint Archiv (täglich 02:00)
+0 2 * * * docker exec paperless_web document_exporter ../export && /usr/bin/rclone copy /home/docker2/pngx/export "sharepoint:Archiv"
+
+# Optional: Logging in Datei statt per Mail
+# * * * * * /usr/bin/rclone move "sharepoint:Mail Anhänge" /home/docker2/pngx/consume >> /var/log/rclone-mail.log 2>&1
+# 0 2 * * * (docker exec paperless_web document_exporter ../export && /usr/bin/rclone copy /home/docker2/pngx/export "sharepoint:Archiv") >> /var/log/paperless-export.log 2>&1

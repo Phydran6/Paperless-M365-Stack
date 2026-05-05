@@ -1,0 +1,9 @@
+# Schema für ~/.config/rclone/rclone.conf
+# Die echte Datei NICHT ins Repo legen (enthält OAuth Token).
+# Stattdessen via `rclone config` interaktiv erstellen.
+
+[sharepoint]
+type = onedrive
+token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"..."}
+drive_id = b!REPLACE_WITH_YOUR_DRIVE_ID
+drive_type = documentLibrary
