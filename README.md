@@ -1,5 +1,14 @@
 # paperless-m365-stack
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Paperless-NGX](https://img.shields.io/badge/Paperless--NGX-17541B?logo=paperless-ngx&logoColor=white)](https://docs.paperless-ngx.com/)
+[![n8n](https://img.shields.io/badge/n8n-EA4B71?logo=n8n&logoColor=white)](https://n8n.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Microsoft 365](https://img.shields.io/badge/Microsoft%20365-D83B01?logo=microsoft&logoColor=white)](https://www.microsoft.com/microsoft-365)
+[![Anthropic Claude](https://img.shields.io/badge/Anthropic%20Claude-D97757?logo=anthropic&logoColor=white)](https://www.anthropic.com/)
+[![Self-Hosted](https://img.shields.io/badge/Self--Hosted-✓-brightgreen)](https://github.com/awesome-selfhosted/awesome-selfhosted)
+[![Maintenance](https://img.shields.io/badge/Maintained-yes-brightgreen.svg)](https://github.com/<USER>/paperless-m365-stack/commits/main)
+
 Self-hosted Paperless-NGX mit Microsoft 365 Anbindung (Outlook + SharePoint), reverse-proxied über Nginx Proxy Manager und automatisiert mit n8n + Claude AI für intelligente Dokumentenbenennung.
 
 ## Was macht das Setup?
