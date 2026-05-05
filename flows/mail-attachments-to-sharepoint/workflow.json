@@ -50,7 +50,7 @@
         }
       },
       "id": "b8891e2f-4e1e-443e-bd54-750f120bd445",
-      "webhookId": "1ae4afb6-04f2-4af3-b88e-5cc839bfa349",
+      "webhookId": "<WEBHOOK_ID_OUTLOOK_GET>",
       "name": "Mails mit Anhängen holen",
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
@@ -60,7 +60,7 @@
       ],
       "credentials": {
         "microsoftOutlookOAuth2Api": {
-          "id": "LZwWtaXfq2J5TCa7",
+          "id": "<OUTLOOK_CREDENTIAL_ID>",
           "name": "Microsoft Outlook account"
         }
       }
@@ -284,8 +284,8 @@
       ],
       "credentials": {
         "anthropicApi": {
-          "id": "kNcQg7qqdb6vhXtR",
-          "name": "n8n2"
+          "id": "<ANTHROPIC_CREDENTIAL_ID>",
+          "name": "Anthropic account"
         }
       },
       "onError": "continueErrorOutput"
@@ -343,7 +343,7 @@
       ],
       "credentials": {
         "microsoftSharePointOAuth2Api": {
-          "id": "tSPU2BBg8VESWa1l",
+          "id": "<SHAREPOINT_CREDENTIAL_ID>",
           "name": "Microsoft SharePoint account"
         }
       },
@@ -383,7 +383,7 @@
       ],
       "credentials": {
         "microsoftSharePointOAuth2Api": {
-          "id": "tSPU2BBg8VESWa1l",
+          "id": "<SHAREPOINT_CREDENTIAL_ID>",
           "name": "Microsoft SharePoint account"
         }
       },
@@ -491,7 +491,7 @@
         }
       },
       "id": "a41899c1-b4a7-4979-bb4d-52e5d98de292",
-      "webhookId": "7199bfcd-e5e3-4600-94b0-93cdd7475a54",
+      "webhookId": "<WEBHOOK_ID_OUTLOOK_MOVE>",
       "name": "Mail -> n8n-fehler",
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
@@ -501,7 +501,7 @@
       ],
       "credentials": {
         "microsoftOutlookOAuth2Api": {
-          "id": "LZwWtaXfq2J5TCa7",
+          "id": "<OUTLOOK_CREDENTIAL_ID>",
           "name": "Microsoft Outlook account"
         }
       }
@@ -521,7 +521,7 @@
         }
       },
       "id": "3099e6a7-3b1c-462f-9f59-6b8dfbe01730",
-      "webhookId": "7199bfcd-e5e3-4600-94b0-93cdd7475a54",
+      "webhookId": "<WEBHOOK_ID_OUTLOOK_MOVE>",
       "name": "Mail -> n8n-erfolgreich",
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
@@ -531,7 +531,7 @@
       ],
       "credentials": {
         "microsoftOutlookOAuth2Api": {
-          "id": "LZwWtaXfq2J5TCa7",
+          "id": "<OUTLOOK_CREDENTIAL_ID>",
           "name": "Microsoft Outlook account"
         }
       }
@@ -545,7 +545,7 @@
         }
       },
       "id": "6e5d5cb0-c3b3-416b-bf92-d991854440d5",
-      "webhookId": "f2fa884f-6168-499e-83db-281d60a27fed",
+      "webhookId": "<WEBHOOK_ID_TELEGRAM>",
       "name": "Send a text message",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
@@ -555,8 +555,8 @@
       ],
       "credentials": {
         "telegramApi": {
-          "id": "ECVCrUBzZXmM8vdy",
-          "name": "Telegram account phytechn8n"
+          "id": "<TELEGRAM_CREDENTIAL_ID>",
+          "name": "Telegram account"
         }
       }
     }
@@ -851,11 +851,11 @@
     "timeSavedMode": "fixed",
     "errorWorkflow": "<ERROR_WORKFLOW_ID>"
   },
-  "versionId": "4491987d-87b0-438f-b260-9987ae766a40",
+  "versionId": "<VERSION_ID>",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "<INSTANCE_ID>"
   },
-  "id": "1oLJZre0QhyzXBGI",
+  "id": "<WORKFLOW_ID>",
   "tags": []
 }
